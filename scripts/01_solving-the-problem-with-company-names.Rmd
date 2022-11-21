@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+library(tidyverse)
+library(tm)
+library(stringi)
+
+```
+
+# Read data:
+```{r}
+
+# Dataset containing information on sites:
+sitedesc_all_years <- read_rds("../data-raw/sitedesc_all_years.rds")
+
+```
+
+# Analysis:
+
+Many companies have different names depending on the year, which makes it hard to track the adoption of a certain product by a certain company. For example:
+```{r}
+
+# Retrieve sites associated to a given company name:
+radiotelevisione_sites <- sitedesc_all_years %>% 
+  filter(company == "RAI RADIOTELEVISIONE ITALIANA") %>% 
+  distinct(siteid) %>% 
+  pull(siteid)
+
+# Check company names associated with these sites:
+sitedesc_all_years %>% 
+  filter(siteid %in% c(radiotelevisione_sites)) %>% 
+  distinct(company, year)
+
+```
+
+In a random sample of 1000 companies, 71.5% have more than one name: 
+```{r}
+
+# Retrieve random sample of 1000 companies:
+set.seed(2)
+companies_list <- sample(sitedesc_all_years$company, 1000)
+
+
+# Function to check whether a company has more than one name:
+one_name <- function(companies_list) {
+  
+  # Create an empty vector to store the results:
+  results <- c()
+
+  for (i in c(1:length(companies_list))) {
+    company_name <- companies_list[i]
+  
+    # How many year-site combinations are linked to the ith company?
+    yearsite_nrow1 <- sitedesc_all_years %>%
+      filter(company == company_name) %>% 
+      nrow()
+  
+    # Get list of sites linked to the ith company:
+    sites_list <- sitedesc_all_years %>%
+      filter(company == company_name) %>% 
+      distinct(siteid) %>% 
+      pull(siteid)
+  
+    # Compare yearsite_nrow1 to the number of year-site combinations linked to the list of sites:
+    yearsite_nrow2 <- sitedesc_all_years %>% 
+      filter(siteid %in% sites_list) %>% 
+      nrow()
+  
+    single_result <- yearsite_nrow1 == yearsite_nrow2
+  
+    # Append the result:
+    results <- c(results, single_result) 
+  }
+
+return(results)
+}
+
+results <- one_name(companies_list) # It takes a few minutes to run
+
+companies_list %>% 
+  as.tibble() %>% 
+  rename(company = value) %>%
+  mutate(result = results) %>% 
+  count(result)
+
+```
+
+Correct companies' names:
+```{r}
+
+sitedesc_all_years_corrected <- sitedesc_all_years %>% 
+  # Lower case:
+  mutate(company = tolower(company)) %>% 
+  # Remove punctuation:
+  mutate(company = removePunctuation(company)) %>% 
+  # Remove accents:
+  mutate(company = stri_trans_general(company, id = "Latin-ASCII")) %>% 
+  # Re-write "limited" as "ltd":
+  mutate(company = str_replace_all(company, "limited", "ltd")) %>% 
+  # Remove all spaces:
+  mutate(company = str_replace_all(company, fixed(" "), ""))
+
+```
+
+Check new results:
+```{r}
+
+set.seed(3)
+companies_list_corrected <- sample(sitedesc_all_years_corrected$company, 1000)
+
+results_corrected <- one_name(companies_list_corrected) # It takes a few minutes to run
+
+companies_list_corrected %>% 
+  as.tibble() %>% 
+  rename(company = value) %>%
+  mutate(result = results_corrected) %>% 
+  count(result)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
